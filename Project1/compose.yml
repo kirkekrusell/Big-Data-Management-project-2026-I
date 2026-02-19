@@ -1,0 +1,11 @@
+services:
+  week01:
+    image: quay.io/jupyter/pyspark-notebook:2025-12-31
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    volumes:
+      - ./work/:/home/jovyan/work
+    environment:
+      - JUPYTER_TOKEN=bdm
+    command: start-notebook.py --ServerApp.token=bdm --ServerApp.password='' --ServerApp.allow_origin='*' --ServerApp.allow_remote_access=True
