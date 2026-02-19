@@ -1,3 +1,3 @@
 # Big-Data-Management-project-2026-I
 
-Group members: Kirke, Kelli, Julie, Teemu
+Group: Kirke Krusell, Kelli Pilvet, Julie Rand, Teemu-Oliver Soorm
