@@ -8,3 +8,30 @@ The pipeline should:
 * Write a complete and continuously growing output dataset
 
 The job must work correctly when new files are added and must not duplicate data when it is run multiple times
+
+---
+
+# Step 1: Start Jupyter with Docker Compose
+In the folder that contains compose.yml, run:
+
+```
+docker compose up -d
+```
+
+Then open:
+- http://localhost:8888
+
+Token:
+- bdm
+
+After running the notebook:
+- Spark UI: http://localhost:4040
+
+---
+
+# Step 2: Open and run the notebook
+
+In JupyterLab:
+1. Open the jupyter/ folder
+2. Open project_1.ipynb
+3. Run → Run All Cells
