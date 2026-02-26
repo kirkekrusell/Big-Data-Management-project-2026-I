@@ -1,1 +1,10 @@
-tere kõik
+The goal of this project is to build an incremental Spark ETL pipeline that processes NYC taxi trip data stored as Parquet files.
+
+The pipeline should:
+* Read new files from Data/inbox/
+* Process only files that have not been processed before
+* Clean and deduplicate the data
+* Enrich trips with taxi zone information
+* Write a complete and continuously growing output dataset
+
+The job must work correctly when new files are added and must not duplicate data when it is run multiple times
