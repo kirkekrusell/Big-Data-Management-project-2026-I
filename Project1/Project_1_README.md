@@ -197,31 +197,41 @@ Output Fields
     ingested_at
 
 # 8. Correctness Evidence
-## 8.1 Row Counts (example)
+## 8.1 Row Counts 
 
-Stage	Count
-Raw input	1,000,000
-After cleaning	980,000
-After deduplication	975,000
-Final output	975,000
+yellow_tripdata_2025-01.parquet
 
-## 8.2 Bad Row Examples
-Issue	Example
-Negative distance	trip_distance = -1.2
-Negative passengers	passenger_count = -3
-Missing timestamps	tpep_pickup_datetime = NULL
+<img width="603" height="675" alt="image" src="https://github.com/user-attachments/assets/ec9e3fef-8520-4567-8f8e-a27ebc1f5a06" />
+<img width="1333" height="682" alt="image" src="https://github.com/user-attachments/assets/f2cc4db6-7963-4c30-8f84-eb3d554e5288" />
+<img width="1322" height="730" alt="image" src="https://github.com/user-attachments/assets/06ea365d-b569-45d7-9c01-8aeccd059f88" />
+
+yellow_tripdata_2025-02.parquet
+
+<img width="809" height="733" alt="image" src="https://github.com/user-attachments/assets/1e7975b2-3e5a-4ae3-a9c9-e8e2655f37e3" />
+<img width="1357" height="711" alt="image" src="https://github.com/user-attachments/assets/eeb0146f-6f98-47f4-aaf5-e722238f37ba" />
+<img width="1345" height="721" alt="image" src="https://github.com/user-attachments/assets/876a2d0c-5540-4e0e-a7a3-530d833e469c" />
+
+Final result 
+
+<img width="1338" height="708" alt="image" src="https://github.com/user-attachments/assets/46c1d055-89b6-4e83-be26-939848561948" />
 
 # 9. Performance Evidence
 ## 9.1 Runtime
 
 Measured using Spark UI and Python timers.
+
+<img width="263" height="181" alt="image" src="https://github.com/user-attachments/assets/e5bdb4e4-9cd9-4822-8632-d0eeebb2a4f0" />
+
 ## 9.2 Spark Web UI Screenshots
 
 Two screenshots are required:
 
     Job / Stage Overview
+<img width="1837" height="719" alt="image" src="https://github.com/user-attachments/assets/0108949d-eaf8-4e49-8311-d24777933635" />
 
     Join or Write Stage (shuffle metrics)
+
+<img width="1841" height="581" alt="image" src="https://github.com/user-attachments/assets/6e13d60d-80cc-4ec2-8f5f-e864a41cbee0" />
 
 ## 9.3 Optimizations Implemented
 
