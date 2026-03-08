@@ -230,7 +230,10 @@ Two screenshots are required:
 
     Join or Write Stage (shuffle metrics)
 
-<img width="1841" height="581" alt="image" src="https://github.com/user-attachments/assets/6e13d60d-80cc-4ec2-8f5f-e864a41cbee0" />
+Shuffle write time
+
+<img width="843" height="361" alt="image" src="https://github.com/user-attachments/assets/1dbd4d65-879e-447f-9927-20fc705faafc" />
+<img width="818" height="394" alt="image" src="https://github.com/user-attachments/assets/45668828-ddd9-4f48-a32c-6287ba129b60" />
 
 ## 9.3 Optimizations Implemented
 
