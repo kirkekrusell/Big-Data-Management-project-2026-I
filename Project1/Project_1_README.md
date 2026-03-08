@@ -219,8 +219,7 @@ Final result
 ## 9.1 Runtime
 
 Measured using Spark UI and Python timers.
-
-<img width="263" height="181" alt="image" src="https://github.com/user-attachments/assets/e5bdb4e4-9cd9-4822-8632-d0eeebb2a4f0" />
+<img width="312" height="35" alt="image" src="https://github.com/user-attachments/assets/a1b765b8-15c8-4df1-a874-1b40e7cf5db0" />
 
 ## 9.2 Spark Web UI Screenshots
 
