@@ -1,52 +1,32 @@
 # 1. Project Goal
 
-The goal of this project is to build an incremental Spark ETL pipeline that processes NYC Yellow Taxi trip data stored as Parquet files. The pipeline runs end‑to‑end, automatically detects and processes new input files, cleans and deduplicates trip records, enriches them with taxi zone information, and produces a continuously growing output dataset.
+The goal of this project is to build an incremental Spark ETL pipeline for NYC Yellow Taxi data.
+The pipeline: detects new Parquet files in data/inbox/, transforms, cleans, deduplicates, and enriches trip data, writes all processed data into a single output dataset, tracks processed files using a manifest to ensure idempotency
 
-The ETL job must behave correctly when new files are added and must remain idempotent: running it multiple times must not duplicate data that has already been processed.
 # 2. Pipeline Overview
 
 ## The ETL pipeline performs the following steps:
 ### 2.1 Incremental Ingestion
-
     Reads Parquet files from data/inbox/
-
     Processes only files that have not been processed before
-
     Tracks processed files using a manifest file: state/manifest.json
-
 ### 2.2 Transformations
-
     Parses timestamps into Spark TimestampType
-
     Casts numeric fields where necessary
-
     Cleans data by removing:
-
         negative values
-
         null timestamps
-
         invalid or corrupted rows
-
     Deduplicates records using a composite key:
     VendorID + pickup/dropoff timestamps + pickup/dropoff LocationID
-
 ### 2.3 Enrichment
-
     Joins trip data with the lookup table: data/lookup/taxi_zone_lookup.parquet
-
     Adds pickup and dropoff zone names, boroughs, and service zones
-
     Uses broadcast joins for performance
-
 ### 2.4 Output
-
     Writes the final enriched dataset to: data/outbox/trips_enriched.parquet
-
     Uses append mode so the output grows incrementally
-
     Ensures no duplicates across runs thanks to the manifest
-
 # 3. Manifest (state.json)
 
 The manifest file keeps track of which input files have already been processed.
@@ -122,25 +102,19 @@ The pipeline enriches each trip with zone information from:
 Pickup Enrichment
 
     pickup_zone
-
     pickup_borough
-
     pickup_service_zone
 
 Dropoff Enrichment
 
     dropoff_zone
-
     dropoff_borough
-
     dropoff_service_zone
 
 Broadcast joins are used to reduce shuffle and improve performance.
 # 6. Scenario: Last N Months Filter
 
-The ETL supports a configuration parameter:
-
-```N_MONTHS = <integer or None>```
+The ETL supports a configuration parameter: ```N_MONTHS = <integer or None>```
 
 If set (e.g., N_MONTHS = 3):
 
@@ -157,43 +131,26 @@ The final dataset is written to:
 ```data/outbox/trips_enriched.parquet```
 
 Write Mode
-
-The job uses:
-
-```mode("append")```
-
+The job uses: ```mode("append")```
 This ensures:
 
     New data is added
-
     Existing data is preserved
-
     No duplicates occur
 
 Output Fields
 
     tpep_pickup_datetime
-
     tpep_dropoff_datetime
-
     PULocationID
-
     DOLocationID
-
     pickup_zone
-
     dropoff_zone
-
     passenger_count
-
     trip_distance
-
     trip_duration_minutes
-
     pickup_date
-
     source_file
-
     ingested_at
 
 # 8. Correctness Evidence
@@ -239,11 +196,8 @@ Shuffle write time
 ## 9.3 Optimizations Implemented
 
     Broadcast joins
-
     Append mode output
-
     Avoiding unnecessary .count() calls
-
     Repartitioning before write when needed
 
 # 10. How to Run the Pipeline
