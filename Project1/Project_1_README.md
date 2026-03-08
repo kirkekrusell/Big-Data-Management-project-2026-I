@@ -49,7 +49,6 @@ The manifest must be preserved between runs so the pipeline can continue increme
 The following fields are cast to Spark TimestampType:
 
     tpep_pickup_datetime
-
     tpep_dropoff_datetime
 
 ## 4.2 Cleaning Rules
@@ -60,26 +59,14 @@ trip_distance >= 0	Removes negative distances
 passenger_count >= 0	Removes invalid passenger counts
 pickup/dropoff timestamps NOT NULL	Ensures valid trip times
 
-Examples of removed “bad rows”:
-
-    trip_distance = -1.2
-
-    passenger_count = -3
-
-    tpep_pickup_datetime = NULL
-
 ## 4.3 Deduplication
 
 A trip is considered unique based on:
 
     VendorID
-
     tpep_pickup_datetime
-
     tpep_dropoff_datetime
-
     PULocationID
-
     DOLocationID
 
 ## 4.4 Derived Fields
@@ -91,7 +78,6 @@ A trip is considered unique based on:
 ## 4.5 Metadata
 
     source_file — input file name
-
     ingested_at — ETL timestamp
 
 # 5. Enrichment
@@ -119,9 +105,7 @@ The ETL supports a configuration parameter: ```N_MONTHS = <integer or None>```
 If set (e.g., N_MONTHS = 3):
 
     The pipeline finds the latest pickup timestamp
-
     Computes a cutoff date = latest pickup − N months
-
     Filters trips where pickup_datetime >= cutoff
 
 If N_MONTHS = None, no filtering is applied.
