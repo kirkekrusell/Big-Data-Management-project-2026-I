@@ -54,14 +54,14 @@ This prevents reprocessing and ensures idempotency.
 
 Example:
 json
-
+```
 {
   "processed_files": [
     "yellow_tripdata_2025-01.parquet",
     "yellow_tripdata_2025-02.parquet"
   ]
 }
-
+```
 The manifest must be preserved between runs so the pipeline can continue incrementally.
 # 4. Transformations (Details)
 ## 4.1 Type Parsing
@@ -219,6 +219,7 @@ Final result
 ## 9.1 Runtime
 
 Measured using Spark UI and Python timers.
+
 <img width="312" height="35" alt="image" src="https://github.com/user-attachments/assets/a1b765b8-15c8-4df1-a874-1b40e7cf5db0" />
 
 ## 9.2 Spark Web UI Screenshots
