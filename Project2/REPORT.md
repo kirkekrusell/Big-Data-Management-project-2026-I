@@ -38,6 +38,7 @@ _Show that stopping and restarting the pipeline does not produce duplicates._
 _Include row counts before and after restart._
 
 ## 6. Custom scenario
+Produce January data to topic taxi-trips-january and February data to topic taxi-trips-february (use the existing --topic and --data flags). Write a single streaming query that subscribes to both using subscribePattern("taxi-trips-.*"). In REPORT.md, show that events from both topics land in the bronze table and explain how Spark tracks offsets across multiple topics.
 
 _Explain and/or show how you solved the custom scenario from the GitHub issue._
 
