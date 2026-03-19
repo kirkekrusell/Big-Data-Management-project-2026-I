@@ -1,0 +1,108 @@
+services:
+
+  # ── Kafka broker (KRaft, no ZooKeeper) ──────────────────────────────────────
+  # apache/kafka is the official ASF image (free, no vendor restrictions).
+  kafka:
+    image: apache/kafka:3.9.2
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qg
+
+  # ── MinIO — S3-compatible object storage for Iceberg data files ──────────────
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API  (boto3 / awscli / spark s3a)
+      - "9001:9001"   # MinIO web console — browse your Iceberg files here
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── One-shot job: create the 'warehouse' bucket ──────────────────────────────
+  mc:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set s3 http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb s3/warehouse --ignore-existing &&
+        echo 'Bucket warehouse is ready'
+      "
+
+  # ── Iceberg REST catalog — manages table metadata, backed by MinIO ───────────
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: iceberg-rest
+    depends_on:
+      mc:
+        condition: service_completed_successfully
+    ports:
+      - "8181:8181"   # Catalog API (http://localhost:8181/v1/...)
+    environment:
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://warehouse/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+      - CATALOG_S3_PATH__STYLE__ACCESS=true
+
+  # ── Jupyter + PySpark with Kafka and Iceberg connectors ─────────────────────
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:2025-12-31
+    container_name: project2_jupyter
+    depends_on:
+      - kafka
+      - iceberg-rest
+    ports:
+      - "8888:8888"   # Jupyter UI
+      - "4040:4040"   # Spark UI (4041, 4042, … for subsequent contexts)
+    volumes:
+      - ./:/home/jovyan/project   # entire project directory available at ~/project
+    environment:
+      - JUPYTER_TOKEN=${JUPYTER_TOKEN}
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - AWS_REGION=us-east-1
+      # Packages downloaded once at PySpark start-up and cached in ~/.ivy2.
+      # • spark-sql-kafka      — Kafka source/sink for Structured Streaming
+      # • iceberg-spark-runtime — Iceberg table format + SparkCatalog
+      # • iceberg-aws-bundle   — shaded AWS SDK v2 for S3FileIO (no classpath conflict)
+      # pyspark-notebook:2025-12-31 ships Spark 4.1.0 (Scala 2.13).
+      # iceberg-spark-runtime-4.0_2.13 is the latest Iceberg runtime compatible with Spark 4.x.
+      # Update versions if Cell 1 reports a different Spark version.
+      - PYSPARK_SUBMIT_ARGS=--packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,org.apache.iceberg:iceberg-aws-bundle:1.10.0 pyspark-shell
+    command: >
+      start-notebook.py
+      --ServerApp.token=${JUPYTER_TOKEN}
+      --ServerApp.password=''
+      --ServerApp.allow_origin='*'
+      --ServerApp.allow_remote_access=True
+
+volumes:
+  minio-data:
