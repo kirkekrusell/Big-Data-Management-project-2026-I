@@ -60,6 +60,6 @@ _Include the `.env` values the grader should use to run your project._
 env values
 ```bash
 MINIO_ROOT_USER=admin
-MINIO_ROOT_PASSWORD=groupc
+MINIO_ROOT_PASSWORD=dbmgroupc
 JUPYTER_TOKEN=bdm2
 ```
