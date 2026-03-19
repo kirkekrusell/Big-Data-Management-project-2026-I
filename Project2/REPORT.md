@@ -57,3 +57,9 @@ python produce.py
 _Add any additional steps or dependencies needed to reproduce your results._
 
 _Include the `.env` values the grader should use to run your project._
+env values
+```bash
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=groupc
+JUPYTER_TOKEN=bdm2
+```
