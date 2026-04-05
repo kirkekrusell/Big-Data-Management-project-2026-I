@@ -75,12 +75,12 @@ show **running** (or **exited** for `minio_init`, which is a one-shot job).
 
 ### 5. Create the topic and start the producer
 
-Create the Kafka topic (do this once after the stack is up):
+Create Kafka topics for our custom scenario (do this once after the stack is up):
 
 ```bash
-docker exec kafka sh -c "/opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server localhost:9092 \
-  --create --topic taxi-trips --partitions 3 --replication-factor 1"
+docker exec kafka sh -c "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic taxi-trips-january --partitions 3 --replication-factor 1"
+
+docker exec kafka sh -c "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic taxi-trips-february --partitions 3 --replication-factor 1"
 ```
 
 Then open a **Jupyter terminal** (File → New Terminal in JupyterLab) and run:
