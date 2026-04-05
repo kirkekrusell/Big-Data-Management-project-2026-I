@@ -3,55 +3,127 @@
 ## 1. Medallion layer schemas
 
 ### Bronze
-_Table DDL or DataFrame schema. Explain what is stored and why it is kept as-is._
-Schema (Iceberg table lakehouse.taxi.bronze):
+**Schema (Iceberg table `lakehouse.taxi.bronze`):**
 
-The Bronze layer stores the raw Kafka events as-is, without parsing or transformation. Keeping the original JSON and Kafka metadata (topic, partition, offset) allows:
+    value        STRING
+    kafka_time   TIMESTAMP
+    topic        STRING
+    partition    INT
+    offset       BIGINT
 
-    full replay/debugging from the original source,
-    auditability of what exactly was ingested,
-    support for multi-topic scenarios (we can see which topic each row came from).
+**Description:**
+
+The Bronze layer stores raw Kafka events exactly as they are received, without any transformation.
+
+In the implementation, the Kafka stream is written directly into the Bronze table:
+
+    bronze_df = raw_stream.selectExpr(
+        "CAST(value AS STRING) AS value",
+        "timestamp AS kafka_time",
+        "topic",
+        "partition",
+        "offset"
+    )
+
+**Justification:**
+
+- Preserves original JSON data for reprocessing and debugging  
+- Retains Kafka metadata (topic, partition, offset)  
+- Supports multi-topic ingestion  
+- Enables replay and auditability  
+
+SELECT topic, COUNT(*) FROM lakehouse.taxi.bronze GROUP BY topic;
+
+![alt text](image-1.png)
+---
   
 ### Silver
 
-_Table DDL or DataFrame schema. Explain what changed compared to bronze and why._
-What changed vs Bronze and why:
+**Schema (Iceberg table `lakehouse.taxi.silver`):**
 
-    JSON parsed: value is parsed into typed columns (ints, doubles, timestamps) for analytics.
-    Timestamps cast: pickup_ts and dropoff_ts are proper TIMESTAMP columns for windowing and time-based queries.
-    Cleaning applied: invalid/null/duplicate rows are removed to improve data quality.
-    Enrichment added: human-readable pickup/dropoff zones and boroughs are joined from the static lookup table.
-    Kafka metadata kept: topic/partition/offset remain for traceability.
+    VendorID INT
+    passenger_count INT
+    trip_distance DOUBLE
+    RatecodeID INT
+    store_and_fwd_flag STRING
+    PULocationID INT
+    DOLocationID INT
+    payment_type INT
+    fare_amount DOUBLE
+    extra DOUBLE
+    mta_tax DOUBLE
+    tip_amount DOUBLE
+    tolls_amount DOUBLE
+    improvement_surcharge DOUBLE
+    total_amount DOUBLE
+    congestion_surcharge DOUBLE
+    Airport_fee DOUBLE
+    cbd_congestion_fee DOUBLE
+    pickup_ts TIMESTAMP
+    dropoff_ts TIMESTAMP
+    pickup_zone STRING
+    pickup_borough STRING
+    dropoff_zone STRING
+    dropoff_borough STRING
 
+**Changes compared to Bronze:**
+
+- JSON parsed into structured columns  
+- Data types converted to numeric and timestamp formats  
+- pickup_ts and dropoff_ts created  
+- Invalid timestamp rows filtered  
+- Data enriched with zone lookup  
+
+**Cleaning:**
+
+    pickup_ts IS NOT NULL AND dropoff_ts IS NOT NULL
+
+**Enrichment:**
+
+- Joined with taxi_zone_lookup.parquet  
+- Broadcast joins used  
+
+
+SELECT * FROM lakehouse.taxi.silver LIMIT 10;
+
+![alt text](image-2.png)
+
+SELECT COUNT(*) FROM lakehouse.taxi.silver;
+
+![alt text](image-3.png)
+
+---
 ### Gold
 
-_Table DDL or DataFrame schema. Explain the aggregation logic._
+**Schema (Iceberg table `lakehouse.taxi.gold`):**
 
-Aggregation logic:
+    pickup_zone STRING
+    pickup_hour TIMESTAMP
+    trip_count BIGINT
+    avg_fare DOUBLE
 
-    Read from lakehouse.taxi.silver as a stream.
+**Aggregation logic:**
 
-    Use pickup_ts as event time.
+    groupBy(window(pickup_ts, "1 hour"), pickup_zone)
+    -> count(*) as trip_count
+    -> avg(fare_amount) as avg_fare
 
-    Apply a 1-hour tumbling window on pickup_ts.
+**Description:**
 
-    Group by window(pickup_ts, '1 hour') and pickup_zone.
+- Uses pickup_ts as event time  
+- 1-hour tumbling window  
+- Aggregates trips per zone  
 
-    Compute:
+**Note:**
+Implemented as batch (not streaming).
 
-        trip_count = count(*)
+SELECT * FROM lakehouse.taxi.gold LIMIT 20;
 
-        avg_fare = avg(fare_amount)
-
-    Select pickup_zone, window.start as pickup_hour, trip_count, avg_fare.
-
-This produces a compact, business-friendly Gold table for hourly demand and pricing analysis by pickup zone.
+![alt text](image-4.png)
 
 ## 2. Cleaning rules and enrichment
 
-_List each cleaning rule (nulls, invalid values, deduplication key) with a brief justification._
-
-Rule 1: Valid timestamps
+Rule: Valid timestamps
 
     Condition:
     pickup_ts IS NOT NULL AND dropoff_ts IS NOT NULL
@@ -59,44 +131,8 @@ Rule 1: Valid timestamps
     Justification:
     Trips without valid pickup/dropoff times cannot be used for time-based analytics or windowing.
 
-Rule 2: Positive trip distance
 
-    Condition:
-    trip_distance IS NOT NULL AND trip_distance > 0
-
-    Justification:
-    Zero or negative distances indicate invalid or corrupted records.
-
-Rule 3: Non-negative monetary amounts
-
-    Condition:
-    total_amount IS NOT NULL AND total_amount >= 0
-
-    (Optionally also fare_amount >= 0)
-
-    Justification:
-    Negative totals are usually errors or special cases not relevant for standard revenue analysis.
-
-Rule 4: Reasonable passenger count
-
-    Condition:
-    passenger_count IS NOT NULL AND passenger_count > 0 AND passenger_count <= 6
-
-    Justification:
-    Filters out impossible values (0 or very large counts) and keeps realistic taxi trips.
-
-Rule 5: Deduplication
-
-    Key:
-    VendorID, pickup_ts, dropoff_ts, PULocationID, DOLocationID, total_amount
-
-    Operation:
-    .dropDuplicates([...])
-
-    Justification:
-    If the same trip is ingested multiple times (e.g., replay, producer restart), this composite key is a good approximation of a unique trip and prevents double-counting.
-
-_Describe the enrichment step (zone lookup join)._
+### Enrichment
 
 tatic table: data/taxi_zone_lookup.parquet
 
@@ -117,6 +153,12 @@ Implementation:
 Justification:
 Location IDs alone are not interpretable; zone and borough names make the data usable for business analysis and reporting.
 
+
+
+Example enriched rows
+
+![alt text](image-5.png)
+
 ## 3. Streaming configuration
 
 _Describe:_
@@ -135,8 +177,6 @@ What it stores:
     Iceberg commit metadata for the sink.
 
 This allows exactly-once or at least no-duplicate behavior when restarting the streaming queries.
-- _Trigger interval and why you chose it._
-
     Typical configuration:
     .trigger(processingTime="5 seconds")
 
@@ -145,7 +185,7 @@ Why 5 seconds:
     Small enough to keep latency low and show progress quickly in a lab setting.
     Large enough to avoid excessive overhead from too many tiny micro-batches.
 
-- _Output mode (append/update/complete) and why._
+
     All sinks use: .outputMode("append")
 
 Why append:
@@ -154,63 +194,48 @@ Why append:
     We are not updating or deleting existing rows, only adding new events and aggregates.
     Append mode is efficient and matches the medallion pattern for streaming ingestion.
     
-- _Watermark (if used) and why._
-    Applied in Gold layer:
-    .withWatermark("pickup_ts", "1 hour")
+### Watermark
 
-Why:
-
-    Tells Spark how long to wait for late events before finalizing windowed aggregates.
-    Prevents unbounded state growth in the aggregation.
-    1 hour is a reasonable tolerance for late-arriving taxi events in this context.
+Not implemented
     
-## 4. Gold table partitioning strategy
+## 4. Gold Table Partitioning
 
-_Explain your partitioning choice. Why this column(s)? What query patterns does it optimize?_
-```
-CREATE TABLE IF NOT EXISTS lakehouse.taxi.gold (
-  pickup_zone  STRING,
-  pickup_hour  TIMESTAMP,
-  trip_count   BIGINT,
-  avg_fare     DOUBLE
-)
-USING iceberg
-PARTITIONED BY (days(pickup_hour));
-```
-Why partition by days(pickup_hour)
+The Gold table is created using Iceberg with the following partitioning strategy:
 
-    Most queries on the Gold table are expected to be time-based:
+    PARTITIONED BY (days(pickup_hour))
 
-        “Show hourly trips for a given day/week.”
+**Explanation:**
 
-        “Compare average fares across days.”
+The `pickup_hour` column represents the start of a 1-hour aggregation window based on the trip pickup timestamp. Partitioning by `days(pickup_hour)` groups all hourly aggregates of the same day into a single partition.
 
-    Partitioning by day:
+**Why this choice:**
 
-        Prunes data efficiently when filtering by date or date range.
-        Keeps partition count manageable (one partition per day, not per hour or zone).
-        Works well with Iceberg’s hidden partitioning and snapshot management.
-    
-    Query patterns optimized:
+- **Optimized for time-based queries**  
+  Most analytical queries focus on specific days or date ranges (e.g., daily trends, weekly comparisons). Partitioning by day allows efficient filtering.
 
-    WHERE pickup_hour >= '2025-01-01' AND pickup_hour < '2025-01-08'
-    WHERE date_trunc('day', pickup_hour) = '2025-01-15'
-    
-_Show the Iceberg snapshot history (query output or screenshot)._
-```
-SELECT *
-FROM lakehouse.taxi.bronze.snapshots;
-```
-This shows:
+- **Partition pruning**  
+  When queries include conditions on `pickup_hour` (e.g., a date range), Iceberg can skip irrelevant partitions, reducing the amount of data scanned.
 
-    snapshot_id
-    committed_at
-    operation (e.g., append)
-    manifest_list
-    summary (including record counts, engine version, etc.)
+- **Balanced number of partitions**  
+  Partitioning by day avoids creating too many small partitions (which would happen with hourly partitioning) while still providing good query performance.
 
-It demonstrates that the table is managed by Iceberg and that each streaming batch creates a new snapshot.
-## 5. Restart proof
+- **Compatible with aggregation level**  
+  Since the data is already aggregated at an hourly level, grouping partitions by day is a natural and efficient choice.
+
+**Example optimized query pattern:**
+
+    SELECT *
+    FROM lakehouse.taxi.gold
+    WHERE pickup_hour >= '2025-01-01'
+      AND pickup_hour < '2025-01-08';
+
+
+![alt text](image-6.png)
+
+---
+## 5. Restart proof - does not work fully for some reason
+
+The idea:
 
     Start the Bronze, Silver, and Gold streaming queries.
     Let the producer (produce.py) run for some time.
@@ -233,71 +258,93 @@ Expected result:
         Kafka offsets were restored from the checkpoint.
         The pipeline did not reprocess already committed data.
         No duplicate rows were written to Bronze/Silver/Gold.
+
+Raelity:
   
-_Show that stopping and restarting the pipeline does not produce duplicates._
-_Include row counts before and after restart._
+First run 
+
+![alt text](image.png)
+
+After restart
+
+![alt text](image-7.png)
+
 
 ## 6. Custom scenario
 Produce January data to topic taxi-trips-january and February data to topic taxi-trips-february (use the existing --topic and --data flags). Write a single streaming query that subscribes to both using subscribePattern("taxi-trips-.*"). In REPORT.md, show that events from both topics land in the bronze table and explain how Spark tracks offsets across multiple topics.
 
-_Explain and/or show how you solved the custom scenario from the GitHub issue._
+Two different datasets were produced to separate Kafka topics:
 
-Scenario:
+- January data → `taxi-trips-january`  
+- February data → `taxi-trips-february`  
 
-    January data → topic taxi-trips-january
-    February data → topic taxi-trips-february
+### Implementation
 
-Using produce.py:
-```
-python produce.py --topic taxi-trips-january --data data/yellow_tripdata_2025-01.parquet
-python produce.py --topic taxi-trips-february --data data/yellow_tripdata_2025-02.parquet
-```
-Single streaming query for both topics:
-python
-```
-raw_stream = (
-    spark.readStream
-    .format("kafka")
-    .option("kafka.bootstrap.servers", "kafka:9092")
-    .option("subscribePattern", "taxi-trips-.*")  # matches both topics
-    .option("startingOffsets", "earliest")
-    .load()
-)
-```
-This feeds into the same Bronze pipeline as before.
+A single streaming query was configured to consume both topics using a pattern:
 
-Proof that both topics land in Bronze:
-```
-SELECT topic, COUNT(*) AS cnt
-FROM lakehouse.taxi.bronze
-GROUP BY topic;
-```
+    .option("subscribePattern", "taxi-trips-.*")
 
-How Spark tracks offsets across multiple topics:
+This allows Spark to automatically subscribe to all topics matching the pattern, including both January and February streams.
 
-    For each topic-partition pair, Spark maintains a separate offset.
-    The checkpoint stores a map of offsets keyed by (topic, partition).
-    On restart, Spark resumes from the last committed offsets for each topic and partition.
-    This ensures exactly-once (or at least no-duplicate) processing even when consuming multiple topics with subscribePattern.
+---
+
+### Proof
+
+To verify that data from both topics is ingested into the Bronze table, the following query was executed:
+
+    SELECT topic, COUNT(*) AS cnt
+    FROM lakehouse.taxi.bronze
+    GROUP BY topic;
+
+- Output showing both topics (taxi-trips-january and taxi-trips-february)
+
+![alt text](image-7.png)
+
+---
+
+### Explanation
+
+- **Multiple topics handled in a single stream**  
+  The `subscribePattern` option allows one streaming job to consume multiple Kafka topics dynamically.
+
+- **Offsets tracked per topic-partition**  
+  Spark maintains separate offsets for each `(topic, partition)` pair.
+
+- **Checkpoint stores offset state**  
+  The checkpoint directory contains the latest committed offsets for all topics and partitions.
+
+- **Correct recovery on restart**  
+  When the pipeline is restarted, Spark resumes from the last processed offsets for each topic independently.
+
+- **No data duplication across topics**  
+  Since offsets are tracked separately, events from each topic are processed exactly once (or without duplication in practice).
+
+---
 ## 7. How to run
 
+
+Step 1: Start infrastructure
 ```bash
-# Step 1: Start infrastructure
 docker compose up -d
+```
 
-# Step 2: Start the producer
-python produce.py
+Step 2. Create Kafka topics for our custom scenario (do this once after the stack is up):
 
-# January only
-python project/produce.py --topic taxi-trips-january --data data/yellow_tripdata_2025-01.parquet
+```bash
+docker exec kafka sh -c "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic taxi-trips-january --partitions 3 --replication-factor 1"
 
-# February only
-python project/produce.py --topic taxi-trips-february --data data/yellow_tripdata_2025-02.parquet
+docker exec kafka sh -c "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --topic taxi-trips-february --partitions 3 --replication-factor 1"
+```
+Step 3. Then open a **Jupyter terminal** (File → New Terminal in JupyterLab) and run:
 
-# Or loop one of them
-python project/produce.py --topic taxi-trips-january --data data/yellow_tripdata_2025-01.parquet --loop
-
-# Step 3: Run the pipeline
+```bash
+python project/produce.py             # 5 events/s, single pass (January data)
+python project/produce.py --loop      # replay indefinitely
+python project/produce.py --rate 20   # faster replay
+python project/produce.py --data data/yellow_tripdata_2025-02.parquet  # February data
+```
+Step 4: Run the pipeline
+```bash
 In Jupyter (http://localhost:8888):
 
     Open the notebook for Project 2.
@@ -314,7 +361,12 @@ In Jupyter (http://localhost:8888):
 There is no extra command-line step; the pipeline is started by running the notebook cells.
 ```
 
-_Add any additional steps or dependencies needed to reproduce your results._
+Step 5. After finishing the project stop the stack
+
+```bash
+docker compose down          # keeps MinIO data (named volume)
+docker compose down -v       # also deletes stored Iceberg tables
+```
 
 _Include the `.env` values the grader should use to run your project._
 env values
