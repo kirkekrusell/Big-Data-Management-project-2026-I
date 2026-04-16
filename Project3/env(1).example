@@ -1,0 +1,14 @@
+# ── MinIO (S3-compatible storage) ──────────────────────────────────────────
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=admin123
+
+# ── PostgreSQL (CDC source) ────────────────────────────────────────────────
+PG_USER=cdc_user
+PG_PASSWORD=admin
+
+# ── Jupyter ────────────────────────────────────────────────────────────────
+JUPYTER_TOKEN=admin
+
+# ── Airflow ────────────────────────────────────────────────────────────────
+AIRFLOW_USER=admin
+AIRFLOW_PASSWORD=admin
