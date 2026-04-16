@@ -12,24 +12,7 @@ nr3 Start the simulator (keep it running in a separate terminal):
 docker exec jupyter python /home/jovyan/project/simulate.py
 
 nr4
-curl.exe -X POST http://localhost:8083/connectors `
-  -H "Content-Type: application/json" `
-  -d "{
-    \"name\": \"cdc-connector\",
-    \"config\": {
-      \"connector.class\": \"io.debezium.connector.postgresql.PostgresConnector\",
-      \"database.hostname\": \"postgres\",
-      \"database.port\": \"5432\",
-      \"database.user\": \"cdc_user\",
-      \"database.password\": \"bdmgroupc\",
-      \"database.dbname\": \"sourcedb\",
-      \"topic.prefix\": \"dbserver1\",
-      \"table.include.list\": \"public.customers,public.drivers\",
-      \"plugin.name\": \"pgoutput\",
-      \"slot.name\": \"debezium_slot\",
-      \"publication.name\": \"dbz_publication\"
-    }
-  }"
+curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json"  --data-binary "@cdc.json"
 
 nr5
 Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8083/connectors/cdc-connector/status" | Select-Object -ExpandProperty Content
