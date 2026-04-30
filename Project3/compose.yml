@@ -203,7 +203,7 @@ services:
       - PG_PASSWORD=${PG_PASSWORD:-cdc_pass}
       - KAFKA_BOOTSTRAP=kafka:9092
       - CONNECT_URL=http://connect:8083
-      - PYSPARK_SUBMIT_ARGS=--packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0,org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.10.0,org.apache.iceberg:iceberg-aws-bundle:1.10.0 pyspark-shell
+      - PYSPARK_SUBMIT_ARGS=--packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0,org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.0,org.apache.iceberg:iceberg-aws-bundle:1.10.0 pyspark-shell
     command: >
       start-notebook.py
       --ServerApp.token=${JUPYTER_TOKEN}
