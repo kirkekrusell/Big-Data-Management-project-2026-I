@@ -1,22 +1,34 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import monotonically_increasing_id
 
-def main():
-    spark = SparkSession.builder \
-        .appName("bronze_taxi") \
-        .getOrCreate()
+S3_ENDPOINT = "http://minio:9000"
 
-    df = spark.read.parquet("data/")
+spark = (
+    SparkSession.builder
+    .appName("Taxi-Bronze")
+    .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
+    .config("spark.sql.catalog.lakehouse.type", "rest")
+    .config("spark.sql.catalog.lakehouse.uri", "http://iceberg-rest:8181")
+    .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+    .config("spark.sql.catalog.lakehouse.s3.endpoint", S3_ENDPOINT)
+    .config("spark.sql.catalog.lakehouse.s3.path-style-access", "true")
+    .config("spark.sql.defaultCatalog", "lakehouse")
+    .getOrCreate()
+)
 
-    # required synthetic key for later join
-    df = df.withColumn("trip_id", monotonically_increasing_id())
+spark.sparkContext.setLogLevel("WARN")
 
-    df.write \
-        .format("iceberg") \
-        .mode("append") \
-        .save("lakehouse.taxi.bronze_trips")
+spark.sql("CREATE NAMESPACE IF NOT EXISTS lakehouse.taxi")
 
-    spark.stop()
+df = spark.read.parquet("/data/taxi/*.parquet")
 
-if __name__ == "__main__":
-    main()
+bronze_df = df.withColumn("trip_id", monotonically_increasing_id())
+
+table = "lakehouse.taxi.bronze_trips"
+
+if not spark.catalog.tableExists(table):
+    bronze_df.writeTo(table).create()
+else:
+    bronze_df.writeTo(table).append()
+
+spark.stop()
