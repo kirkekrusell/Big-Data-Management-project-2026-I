@@ -1,30 +1,79 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql import functions as F
 
-def main():
-    spark = SparkSession.builder \
-        .appName("silver_taxi") \
-        .getOrCreate()
+S3_ENDPOINT = "http://minio:9000"
 
-    df = spark.read.format("iceberg").load("lakehouse.taxi.bronze_trips")
+spark = (
+    SparkSession.builder
+    .appName("Taxi-Silver")
+    .config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
+    .config("spark.sql.catalog.lakehouse.type", "rest")
+    .config("spark.sql.catalog.lakehouse.uri", "http://iceberg-rest:8181")
+    .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+    .config("spark.sql.catalog.lakehouse.s3.endpoint", S3_ENDPOINT)
+    .config("spark.sql.catalog.lakehouse.s3.path-style-access", "true")
+    .config("spark.sql.defaultCatalog", "lakehouse")
+    .getOrCreate()
+)
 
-    # cleaning rules for NYC TLC dataset
-    df_clean = df \
-        .filter(col("fare_amount") > 0) \
-        .filter(col("trip_distance") > 0) \
-        .filter(col("passenger_count") > 0)
+spark.sparkContext.setLogLevel("WARN")
 
-    # type safety (important for Iceberg stability)
-    df_clean = df_clean \
-        .withColumn("fare_amount", col("fare_amount").cast("double")) \
-        .withColumn("trip_distance", col("trip_distance").cast("double"))
+bronze = spark.table("lakehouse.taxi.bronze_trips")
 
-    df_clean.write \
-        .format("iceberg") \
-        .mode("overwrite") \
-        .save("lakehouse.taxi.silver_trips")
+clean = (
+    bronze
+    .withColumn("pickup_ts", F.to_timestamp("pickup_datetime"))
+    .withColumn("dropoff_ts", F.to_timestamp("dropoff_datetime"))
+    .withColumn("passenger_count", F.col("passenger_count").cast("int"))
+    .withColumn("trip_distance", F.col("trip_distance").cast("double"))
+    .withColumn("fare_amount", F.col("fare_amount").cast("double"))
+)
 
-    spark.stop()
+clean = clean.filter(
+    (F.col("pickup_ts").isNotNull()) &
+    (F.col("dropoff_ts").isNotNull()) &
+    (F.col("pickup_ts") < F.col("dropoff_ts")) &
+    (F.col("trip_distance") > 0) &
+    (F.col("fare_amount") > 0) &
+    (F.col("passenger_count") > 0) &
+    (F.col("passenger_count") <= 6)
+)
 
-if __name__ == "__main__":
-    main()
+zones = spark.table("lakehouse.taxi.zones")
+
+silver = (
+    clean
+    .join(
+        zones.withColumnRenamed("zone_id", "pickup_zone_id_dim"),
+        clean["pickup_zone_id"] == F.col("pickup_zone_id_dim"),
+        "left"
+    )
+    .withColumnRenamed("zone_name", "pickup_zone_name")
+    .drop("pickup_zone_id_dim")
+    .join(
+        zones.withColumnRenamed("zone_id", "dropoff_zone_id_dim"),
+        clean["dropoff_zone_id"] == F.col("dropoff_zone_id_dim"),
+        "left"
+    )
+    .withColumnRenamed("zone_name", "dropoff_zone_name")
+    .drop("dropoff_zone_id_dim")
+    .withColumn("pickup_date", F.to_date("pickup_ts"))
+)
+
+table = "lakehouse.taxi.silver_trips"
+
+if not spark.catalog.tableExists(table):
+    (
+        silver
+        .writeTo(table)
+        .partitionedBy("pickup_date")
+        .create()
+    )
+else:
+    (
+        silver
+        .writeTo(table)
+        .overwritePartitions()
+    )
+
+spark.stop()
