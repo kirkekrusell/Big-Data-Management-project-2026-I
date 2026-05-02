@@ -13,6 +13,7 @@ nr3 Start the simulator (keep it running in a separate terminal):
 docker exec jupyter python /home/jovyan/project/simulate.py
 
 from a host terminal:
+
 docker exec jupyter python /home/jovyan/project/produce.py --loop
 
 nr4
