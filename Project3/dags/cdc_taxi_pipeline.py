@@ -60,7 +60,7 @@ with DAG(
         bash_command="spark-submit /opt/airflow/jobs/validate_cdc_counts.py",
     )
 
-    end = EmptyOperator(task_id="end")
+    end = EmptyOperator(task_id="end", , trigger_rule="all_done")
 
     start >> connector_health
     connector_health >> [bronze_cdc, bronze_taxi]
