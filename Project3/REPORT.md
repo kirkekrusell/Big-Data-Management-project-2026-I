@@ -110,6 +110,25 @@ docker compose down          # keeps MinIO data (named volume)
 docker compose down -v       # also deletes stored Iceberg tables
 ```
 
+### Notes
+If connector_health fails due to airflow.exceptions.AirflowNotFoundException: The conn_id `debezium_connect` isn't defined then do the following in the Airflow UI:
+1. Open your Airflow Web UI (typically http://localhost:8080).
+
+2. Navigate to Admin > Connections.
+
+3. Click the + (plus) icon to add a new connection.
+
+4. Enter the following details:
+
+  -   Connection Id: debezium_connect
+
+  -   Connection Type: HTTP
+
+  -   Host: connect (this is the service name for Kafka Connect)
+
+  -   Port: 8083
+
+5. Click Save.
 
 
 ## What is graded
