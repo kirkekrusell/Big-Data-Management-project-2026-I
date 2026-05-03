@@ -172,7 +172,7 @@ Because we ran into some problems getting our cdc_taxi_pipeline DAG to actually 
 - Describe retry and failure handling. Show at least one example of a failed task and how the DAG handled it.
     - The pipeline includes built-in resilience with retries: 1 and a 3-minute delay.
 - Show DAG run history — at least 3 successful consecutive runs.
-    - *Didi not manage to get a successful run for our DAG*
+    - *Did not manage to get a successful run for our DAG*
 - Explain how backfill works for your DAG.
     - The DAG is set to catchup=False. Once the Spark connection issue is resolved, a manual backfill will be required to process the data missed during the downtime.  Because our logic uses MERGE and overwritePartitions(), the backfill process is idempotent and will safely reconcile the data without duplicates.
 
