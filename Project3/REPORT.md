@@ -2,17 +2,8 @@
 
 ## Setup
 
-### 1. Configure credentials
 
-```bash
-cp .env.example .env
-# Edit .env — change all default passwords before starting the stack
-```
-
-The `.env` file is git-ignored and never committed.
-You need to change all the default secrets, and provide them in `REPORT.md` section 8 in your project submission.
-
-### 2. Place the data files
+### 1. Place the data files
 
 Same taxi data as Project 2:
 
@@ -24,16 +15,13 @@ project_3/
     └── taxi_zone_lookup.parquet
 ```
 
-### 3. Start the stack
+### 2. Start the stack
 
 ```bash
 docker compose up -d
 ```
 
-Allow ~30 seconds for all services to become ready. PostgreSQL, Kafka, Kafka Connect,
-MinIO, Iceberg catalog, Airflow, and Jupyter all need to start in order.
-
-### 4. Verify services
+### 3. Verify services
 
 ```bash
 docker ps
@@ -53,16 +41,16 @@ You should see these services running:
 | `airflow-scheduler` | Airflow DAG scheduler |
 | `jupyter` | Jupyter + PySpark |
 
-### 5. Seed the PostgreSQL source
+### 4. Seed the PostgreSQL source
 
 ```bash
 docker exec jupyter python /home/jovyan/project/seed.py
 ```
 
-This creates the source tables and inserts initial data. Verify in the Jupyter notebook:
+### 5. Start the simulator (keep it running in a separate terminal):
 
-```python
-pg_execute("SELECT * FROM customers ORDER BY id;", fetch=True)
+```bash
+docker exec jupyter python /home/jovyan/project/simulate.py
 ```
 
 ### 6. Start the taxi producer (same as Project 2)
@@ -70,17 +58,35 @@ pg_execute("SELECT * FROM customers ORDER BY id;", fetch=True)
 ```bash
 docker exec jupyter python /home/jovyan/project/produce.py --loop
 ```
-
-### 7. Start the change simulator
+OR do it in Jupyter terminal (in Docker)
 
 ```bash
-docker exec jupyter python /home/jovyan/project/simulate.py
+python project/produce.py             
+python project/produce.py --loop     
+python project/produce.py --rate 20   
+python project/produce.py --data data/yellow_tripdata_2025-02.parquet  
 ```
 
-This continuously makes random inserts, updates, and deletes to the PostgreSQL
-source tables, simulating a live application.
+### 7. Register the Debezium Connector
 
-### 8. Open services
+```bash
+curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json" --data-binary "@cdc.json"
+```
+
+### 8. Check the Connector Health
+
+```bash
+Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8083/connectors/cdc-connector/status" | Select-Object -ExpandProperty Content
+```
+
+
+### 9. Verify Data in Kafka (Manual check)
+
+```bash
+docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic dbserver1.public.customers --from-beginning --max-messages 3
+```
+
+### 10. Open services
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
@@ -91,7 +97,13 @@ source tables, simulating a live application.
 | Kafka Connect API | http://localhost:8083 | — |
 | Iceberg REST API | http://localhost:8181/v1/namespaces | — |
 
-### 9. Stop the stack
+### 11. If airflow doesn't open with password in env, overwrite it with the same password (replace USER and PASS with username and password in .env file.)
+
+```bash 
+docker compose exec airflow airflow users reset-password --username USER --password PASS
+```
+
+### 12. Stop the stack
 
 ```bash
 docker compose down          # keeps MinIO data (named volume)
