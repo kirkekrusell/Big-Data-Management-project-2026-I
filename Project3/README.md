@@ -31,3 +31,25 @@ docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server lo
 nr 7  
 if needed change airflow password
 docker compose exec airflow airflow users reset-password --username admin --password bdmgroupc
+
+### Notes
+If connector_health fails due to airflow.exceptions.AirflowNotFoundException: The conn_id `debezium_connect` isn't defined then do the following in the Airflow UI:
+1. Create debezium connection in Airflow UI
+
+2. Open your Airflow Web UI (typically http://localhost:8080).
+
+3. Navigate to Admin > Connections.
+
+4. Click the + (plus) icon to add a new connection.
+
+5. Enter the following details:
+
+  -   Connection Id: debezium_connect
+
+  -   Connection Type: HTTP
+
+  -   Host: connect (this is the service name for Kafka Connect)
+
+  -   Port: 8083
+
+6. Click Save.
