@@ -131,30 +131,50 @@ If connector_health fails due to airflow.exceptions.AirflowNotFoundException: Th
 5. Click Save.
 
 
-## What is graded
+## REPORT
 
-Create a report (`REPORT.md`, max ~3 pages). Use the template provided.
+Because we ran into some problems getting our cdc_taxi_pipeline DAG to actually work, out report parts that cover everything after running this DAG is an idea. But we still wanted to include our thoughts how it would work if we would have been able to debug this technical problem.
 
 ### 1. CDC correctness
 
 - Show that silver mirrors PostgreSQL (compare row counts and spot-check specific rows).
+    - The pipeline ensures that the Iceberg Silver layer mirrors the source PostgreSQL database. The script validate_cdc_counts.py performs an automated row count comparison between the source tables (customers, drivers) and the Iceberg silver tables. If the counts do not match, a RuntimeError is raised, causing the Airflow pipeline to fail.
 - Show that deletes in PostgreSQL are reflected in silver.
+    - The silver_cdc.py script implements MERGE INTO logic. It specifically handles Debezium delete operations (op = 'd') by executing a DELETE command on the target Iceberg table when a match is found.
 - Show that the pipeline is idempotent — running the DAG twice with no new changes produces the same state.
+    - *Because our DAG failed, we can't show that*
 
 ### 2. Lakehouse design
 
 - Describe the schema of bronze CDC, silver CDC, bronze taxi, silver taxi, and gold tables.
+    - Bronze CDC: Contains raw Debezium payload fields including op (operation type), before, after, ts_ms, and source table metadata.
+    - Silver CDC: A cleaned table with a flattened schema: id (INT), name (STRING), and email (STRING).
+    - Bronze Taxi: Raw Parquet data from S3/MinIO with an added unique trip_id generated via monotonically_increasing_id().
+    - Silver Taxi: Refined data with casted types (timestamps, doubles), filtered for validity (e.g., passenger_count > 0), and joined with zone lookups to include pickup_zone_name and dropoff_zone_name.
+    - Gold Taxi: An aggregated table showing trips_count, avg_fare_amount, and avg_trip_distance, grouped by pickup_zone_name and pickup_hour.
 - Show Iceberg snapshot history for the silver CDC table.
+    - <img width="561" height="145" alt="image" src="https://github.com/user-attachments/assets/202cb744-7676-44a9-8d5d-733d043a5c51" />
 - Explain how you would roll back a bad MERGE using Iceberg time travel.
+    - If a MERGE operation introduces corrupt data, Iceberg allows a rollback to a previous known good state using the system procedure: ```CALL lakehouse.system.rollback_to_snapshot('cdc.silver_customers', <snapshot_id>)```
 
 ### 3. Orchestration design
 
 - Include a screenshot of your Airflow DAG (graph view).
+    - Here is where we ran into a problem and could not debug why airflow and spark wouldn't connect correctly.
+    - <img width="1260" height="226" alt="image" src="https://github.com/user-attachments/assets/7009f637-eaf6-4d4a-a9f9-296238e49534" />
 - Explain the task dependency chain and why tasks are in this order.
+    - The workflow follows this logical sequence:
+        - start → connector_health → [bronze_cdc, bronze_taxi] → [silver_cdc, silver_taxi] → [validate, gold_taxi] → end
+    - The workflow begins with the connector_health sensor to verify the Kafka Debezium connector is active, preventing Spark jobs from running against an unavailable data stream. Once cleared, the DAG executes the CDC and Taxi branches in parallel to optimize runtime, as their sources are independent. Within each branch, tasks must follow a strict sequential order—Bronze to Silver to Gold—because each layer requires the refined output of the previous one for transformations like deduplication and aggregation. Finally, the validate task serves as a quality gate at the end of the CDC chain to ensure Lakehouse record counts match the PostgreSQL source before the pipeline is marked successful.
+- Gold/Validation tasks.
 - Describe your scheduling strategy and what freshness SLA it supports.
+    - The DAG is configured with a schedule_interval="*/15 * * * *" (every 15 minutes). This frequency is designed to support a 15-minute data freshness SLA, ensuring that insights in the Gold layer reflect near real-time changes from the PostgreSQL source and the taxi data repository.
 - Describe retry and failure handling. Show at least one example of a failed task and how the DAG handled it.
+    - The pipeline includes built-in resilience with retries: 1 and a 3-minute delay.
 - Show DAG run history — at least 3 successful consecutive runs.
+    - *Didi not manage to get a successful run for our DAG*
 - Explain how backfill works for your DAG.
+    - The DAG is set to catchup=False. Once the Spark connection issue is resolved, a manual backfill will be required to process the data missed during the downtime.  Because our logic uses MERGE and overwritePartitions(), the backfill process is idempotent and will safely reconcile the data without duplicates.
 
 ### 4. Streaming pipeline (taxi)
 
@@ -164,25 +184,6 @@ Create a report (`REPORT.md`, max ~3 pages). Use the template provided.
 ### 5. Custom scenario
 
 - Explain and/or show how you solved the custom scenario from the GitHub issue.
-
-
-
-## Grading checklist (self-review before submission)
-
-- [ ] `docker compose up` + seed + simulate + produce + run DAG end-to-end without errors
-- [ ] Debezium connector is registered and RUNNING
-- [ ] Bronze CDC table contains raw Debezium events with correct op, before, after fields
-- [ ] Silver CDC table matches PostgreSQL source (row count + spot check)
-- [ ] Deletes in PostgreSQL are reflected in silver CDC
-- [ ] Running the DAG twice produces the same silver state (idempotent)
-- [ ] Taxi bronze/silver/gold tables are correct (improved from Project 2)
-- [ ] Airflow DAG is visible in the UI with correct task dependencies
-- [ ] At least 3 successful DAG runs shown
-- [ ] Retry/failure handling configured and documented
-- [ ] Iceberg snapshot history shown in REPORT.md
-- [ ] Custom scenario implemented and documented
-- [ ] REPORT.md answers all required sections
-- [ ] `.env` values provided in REPORT.md section 8
 
 ---
 
