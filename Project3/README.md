@@ -34,15 +34,13 @@ docker compose exec airflow airflow users reset-password --username admin --pass
 
 ### Notes
 If connector_health fails due to airflow.exceptions.AirflowNotFoundException: The conn_id `debezium_connect` isn't defined then do the following in the Airflow UI:
-1. Create debezium connection in Airflow UI
+1. Open your Airflow Web UI (typically http://localhost:8080).
 
-2. Open your Airflow Web UI (typically http://localhost:8080).
+2. Navigate to Admin > Connections.
 
-3. Navigate to Admin > Connections.
+3. Click the + (plus) icon to add a new connection.
 
-4. Click the + (plus) icon to add a new connection.
-
-5. Enter the following details:
+4. Enter the following details:
 
   -   Connection Id: debezium_connect
 
@@ -52,4 +50,4 @@ If connector_health fails due to airflow.exceptions.AirflowNotFoundException: Th
 
   -   Port: 8083
 
-6. Click Save.
+5. Click Save.
