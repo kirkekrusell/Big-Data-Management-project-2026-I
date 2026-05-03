@@ -159,6 +159,7 @@ services:
       - PG_PASSWORD=${PG_PASSWORD:-cdc_pass}
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
       - airflow-data:/opt/airflow
     entrypoint: >
       /bin/bash -c "
