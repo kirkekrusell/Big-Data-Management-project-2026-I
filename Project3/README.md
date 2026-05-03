@@ -27,3 +27,7 @@ Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8083/connectors/cdc-co
 nr6
 
 docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic dbserver1.public.customers --from-beginning --max-messages 3
+
+nr 7  
+if needed change airflow password
+docker compose exec airflow airflow users reset-password --username admin --password bdmgroupc
