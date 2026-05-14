@@ -1,0 +1,29 @@
+# RICO Lab — laptop-side dependencies for the Jupyter notebook.
+# Major versions pinned to match production pyproject.toml; pip resolves the rest.
+
+# Notebook runtime
+jupyterlab>=4.0
+ipykernel>=6.29
+ipython>=8.20
+ipywidgets>=8.1
+
+# Core data + display
+numpy>=1.26
+pandas>=2.0
+pillow>=10.0
+matplotlib>=3.8
+
+# Infra clients (talk to the running docker-compose stack)
+psycopg[binary]>=3.2
+pgvector>=0.3
+boto3>=1.35
+requests>=2.32
+
+# ML stack — same versions as production
+# datasets pinned to <3 so script-based HF datasets (e.g. rootsautomation/RICO-Screen2Words) still load.
+datasets<3
+huggingface_hub<0.24
+fsspec<2024.4
+torch>=2.4
+open-clip-torch>=2.30
+sentence-transformers>=3.0
