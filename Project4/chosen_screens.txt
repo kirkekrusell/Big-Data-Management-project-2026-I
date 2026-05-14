@@ -1,0 +1,18 @@
+# RICO Lab — the 5 screen IDs the notebook ingests.
+#
+# Picked from the first 13 rows of the HuggingFace `rootsautomation/RICO-Screen2Words`
+# train split (streaming order), chosen so that all 5 screens land in a different
+# app category (≥3 required by LAB.md §subtask 0). Notebook iterates the stream
+# and keeps rows whose screenId is in this set; the rest are skipped.
+#
+# screen_id   app_package                category
+# 2           yong.app.videoeditor       Video Players & Editors
+# 26          com.scotiabank.mobile      Finance
+# 37          com.sleep.fan              Lifestyle
+# 41          ws.xsoh.Qamusee            Books & Reference
+# 50          com.marcow.birthdaylist    Social
+2
+26
+37
+41
+50
