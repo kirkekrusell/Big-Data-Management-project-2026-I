@@ -11,4 +11,7 @@ RUN pip install --no-cache-dir \
     pgvector \
     pillow \
     requests \
-    boto3
+    boto3 \
+    datasets \
+    transformers \
+    sentence-transformers

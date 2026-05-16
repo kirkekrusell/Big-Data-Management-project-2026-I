@@ -11,6 +11,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     PYTHONPATH: /opt/airflow/dags:/opt/airflow
+    AIRFLOW__WEBSERVER__SECRET_KEY: rico-pipeline-project-not-for-prod
   volumes:
     - ./dags:/opt/airflow/dags
   networks:
