@@ -1,87 +1,126 @@
-# Lab-only stack: Postgres + pgvector, MinIO (S3), Ollama (LLM).
-# Subset of the production docker-compose at the repo root — no Airflow,
-# because the notebook calls Postgres / MinIO / Ollama directly.
-#
-# Image versions are pinned for reproducibility, matching the production stack.
+name: rico-pipeline-project
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://rico:rico@postgres:5432/rico
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    PYTHONPATH: /opt/airflow/dags:/opt/airflow
+  volumes:
+    - ./dags:/opt/airflow/dags
+  networks:
+    - rico-net
 
 services:
-
   postgres:
-    # PostgreSQL 16 LTS + pgvector 0.8 (HNSW + halfvec available).
     image: pgvector/pgvector:0.8.0-pg16
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-rico}
-      POSTGRES_USER: ${POSTGRES_USER:-rico}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rico}
+      POSTGRES_USER: rico
+      POSTGRES_PASSWORD: rico
+      POSTGRES_DB: rico
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Migrations run alphabetically on first init (empty data dir).
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rico} -d ${POSTGRES_DB:-rico}"]
+      test: ["CMD-SHELL", "pg_isready -U rico"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - rico-net
 
   minio:
-    # Pinned RELEASE: MinIO ships breaking server/CLI changes on :latest.
     image: minio/minio:RELEASE.2024-12-13T22-19-12Z
     command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # web console (browse buckets at http://localhost:9001)
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null"]
       interval: 5s
       timeout: 5s
-      retries: 20
-
-  minio-init:
-    # Aligns mc client release with the server release above.
-    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin} &&
-      mc mb --ignore-existing local/${MINIO_BUCKET:-rico-raw} &&
-      echo 'minio bucket ready'
-      "
-    restart: "no"
+      retries: 12
+    mem_limit: 256m
+    networks:
+      - rico-net
 
   ollama:
-    # Pinned API surface (/api/tags, /api/generate) — the notebook contract.
     image: ollama/ollama:0.5.4
     ports:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
-      test: ["CMD-SHELL", "ollama --version >/dev/null 2>&1 || exit 1"]
-      interval: 5s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:11434 >/dev/null"]
+      interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 5
+    networks:
+      - rico-net
 
-  ollama-init:
-    image: ollama/ollama:0.5.4
+  airflow-init:
+    <<: *airflow-common
+    command: version
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        airflow db migrate && \
+        airflow users create \
+          --username admin --password admin \
+          --firstname Rico --lastname Pipeline \
+          --role Admin --email admin@example.com || true
     depends_on:
-      ollama:
+      postgres:
         condition: service_healthy
-    environment:
-      OLLAMA_HOST: ollama:11434
-    entrypoint: >
-      /bin/sh -c "ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} && echo 'ollama model ready'"
     restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    mem_limit: 1536m
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --limit 1 >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    mem_limit: 2g
 
 volumes:
   postgres-data:
   minio-data:
   ollama-data:
+
+networks:
+  rico-net:
+    driver: bridge
