@@ -19,8 +19,7 @@ help:
 	@echo "  logs         tail compose logs"
 
 up:
-	$(COMPOSE) up -d --wait postgres minio ollama
-	$(COMPOSE) up -d minio-init ollama-init
+	$(COMPOSE) up -d
 
 down:
 	$(COMPOSE) down

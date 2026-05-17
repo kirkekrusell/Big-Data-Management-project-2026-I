@@ -12,7 +12,12 @@ MINIO_BUCKET = "rico-raw"
 
 
 def get_db():
-    conn = psycopg.connect(POSTGRES_DSN)
+    conn = psycopg.connect(
+        "dbname=rico user=rico password=rico host=postgres port=5432",
+        autocommit=True # Ülioluline laienduste loomiseks ja registreerimiseks
+    )
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     register_vector(conn)
     return conn
 

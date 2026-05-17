@@ -36,23 +36,28 @@ def text_representation(elements):
 def run_parse(**context):
     run_id = context["ti"].xcom_pull(key="run_id")
     s3 = get_s3()
-    conn = get_db()
 
-    with conn, conn.cursor() as cur:
-        cur.execute("SELECT screen_id, hierarchy_json_path FROM screens_metadata WHERE run_id = %s", (run_id,))
-        rows = cur.fetchall()
-
-        for sid, json_path in rows:
-            raw = s3.get_object(Bucket=MINIO_BUCKET, Key=json_path)["Body"].read().decode()
-            elements = parse_hierarchy(raw)
-            text_rep = text_representation(elements)
-
+    # 1. Küsime töötlemiseks vajalikud read ja sulgeme ühenduse kohe
+    with get_db() as conn:
+        with conn.cursor() as cur:
             cur.execute(
-                """
-                UPDATE screens_metadata
-                SET extraction_payload = jsonb_build_object('text_rep', %s),
-                    updated_at = NOW()
-                WHERE screen_id = %s
-                """,
-                (text_rep, sid),
+                "SELECT screen_id, hierarchy_json_path FROM screens_metadata WHERE run_id = %s", 
+                (run_id,)
             )
+            rows = cur.fetchall()
+
+    # 2. Töötleme andmed tsüklis (andmebaasi ühendust ei hoita MinIO päringute ajal lahti)
+    for sid, json_path in rows:
+        raw = s3.get_object(Bucket=MINIO_BUCKET, Key=json_path)["Body"].read().decode()
+        elements = parse_hierarchy(raw)
+        text_rep = text_representation(elements)
+
+        # 3. Salvestame tulemuse värske lühiajalise ühendusega, vältides timeouti
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE screens_metadata
+                    SET extraction_payload = jsonb_build_object('texts', %s::text),  -- text_rep on string, seega ::text
+                        updated_at = NOW()
+                    WHERE screen_id = %s
+                """, (text_rep, sid))  # Kasutame korrektset muutujat text_rep

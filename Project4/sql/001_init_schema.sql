@@ -7,6 +7,30 @@
 ---------------------------------------------------------------
 -- 1. pipeline_runs — every DAG run is recorded here
 ---------------------------------------------------------------
+
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS screens_metadata (
+    screen_id TEXT PRIMARY KEY, 
+    extraction_payload JSONB, 
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS screens_embeddings (
+    screen_id TEXT, 
+    model_name TEXT, 
+    model_version TEXT, 
+    embedding_kind TEXT, 
+    embedding vector(384)
+);
+
+CREATE TABLE IF NOT EXISTS screens_review_queue (
+    screen_id TEXT PRIMARY KEY
+);
+
+
+
 CREATE TABLE IF NOT EXISTS pipeline_runs (
     run_id UUID PRIMARY KEY,
     dag_run_id TEXT NOT NULL,

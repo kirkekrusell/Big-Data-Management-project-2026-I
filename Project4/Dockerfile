@@ -4,7 +4,7 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 USER airflow
-# Paigaldame kõik kerged paketid otse pildi sisse
+# Paigaldame kõik paketid otse pildi sisse (lisatud open-clip-torch)
 RUN pip install --no-cache-dir \
     minio \
     "psycopg[binary]" \
@@ -14,4 +14,5 @@ RUN pip install --no-cache-dir \
     boto3 \
     datasets \
     transformers \
-    sentence-transformers
+    sentence-transformers \
+    open-clip-torch>=2.30
