@@ -45,7 +45,6 @@ Project4/
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Makefile
-├── requirements.txt
 └── README.md
 ```
 ## 3. Schema Overview
