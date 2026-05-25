@@ -17,7 +17,7 @@ def init_embeddings_table(cur):
             model_name TEXT,
             model_version TEXT,
             embedding_kind TEXT,
-            embedding vector(384),
+            embedding vector,
             run_id UUID,
             source_fingerprint TEXT,
             CONSTRAINT screens_embeddings_pk PRIMARY KEY (screen_id, model_name, model_version, embedding_kind)
