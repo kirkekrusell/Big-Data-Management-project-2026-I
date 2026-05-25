@@ -50,25 +50,30 @@ Project4/
 ```
 ## 3. Schema Overview
 
-Defined in migrations/001_init.sql.
-New tables
+Defined in migrations/init.sql.
+Tables
 
-    pipeline_runs — run metadata (run_id, dag_run_id, timestamps, LIMIT, git SHA, model versions)
-    pipeline_metrics — pipeline health + data quality metrics
-    audit_results — audit history
-
-Modified tables
-Added to:
-
-    screens_metadata
-    screens_embeddings
-    screens_review_queue
-
-New columns:
-
-    run_id (UUID)
-    source_fingerprint (SHA‑256)
-
+screens_metadata 
+ ```
+Stores raw metadata, parsed text, and LLM extraction results.
+Columns include:
+screen_id, app_package, category, png_path, hierarchy_json_path,
+extraction_payload, prompt_version, confidence, timestamps.
+```
+screens_embeddings
+```
+Stores CLIP and SBERT embeddings.
+Primary key:
+(screen_id, model_name, model_version, embedding_kind)
+```
+screens_review_queue
+```
+Screens that require manual review (LLM low confidence, etc).
+```
+ screens_eval  
+ ```
+ Stores evaluation results (recall@5, model version, number of queries).
+ ```
 ## 4. Pipeline Stages
 The DAG runs:
 ```
