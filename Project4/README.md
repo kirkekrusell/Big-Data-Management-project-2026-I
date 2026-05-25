@@ -96,20 +96,17 @@ All inserts use ON CONFLICT DO NOTHING for idempotency.
 ## 5. Audit (Duplicate Detection)
 
 Audit fails the run if:
-screens_embeddings
-
+### screens_embeddings
 Duplicate:
 ```
 (screen_id, model_name, model_version, embedding_kind)
 ```
-screens_metadata
-
+### screens_metadata
 Duplicate:
 ```
 screen_id
 ```
-If duplicates exist:
-
+### If duplicates exist:
     audit task fails loudly
     eval is skipped
     run is marked paused-by-audit
@@ -118,16 +115,13 @@ If duplicates exist:
 ## 6. Metrics (Observability)
 
 At end of run, the pipeline writes metrics to pipeline_metrics:
-Pipeline health
-
+### Pipeline health
     per‑task duration
     per‑task row in/out
     retries
     total run duration
     final status
-
-Data quality
-
+### Data quality
     metadata: row count, % extraction_payload, % confidence ≥ 0.5, % in review queue
     embeddings: row count per model, avg dimensionality, % zero‑norm vectors
     distinct app_package + category
