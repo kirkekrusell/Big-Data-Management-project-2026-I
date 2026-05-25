@@ -64,12 +64,23 @@ services:
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:11434 >/dev/null"]
+      test: ["CMD-SHELL", "ollama --version >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - rico-net
+
+  ollama-init:
+    image: ollama/ollama:0.5.4
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: ollama:11434
+    entrypoint: >
+      /bin/sh -c "ollama pull ${OLLAMA_MODEL:-qwen2.5:3b} && echo 'ollama model ready'"
+    restart: "no"
 
   airflow-init:
     <<: *airflow-common

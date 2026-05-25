@@ -19,7 +19,9 @@ help:
 	@echo "  logs         tail compose logs"
 
 up:
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --wait postgres minio ollama
+	$(COMPOSE) up -d ollama-init airflow-init
+	$(COMPOSE) up -d airflow-webserver airflow-scheduler
 
 down:
 	$(COMPOSE) down
