@@ -1,0 +1,244 @@
+name: maria-reliability-lab
+
+x-airflow-common: &airflow-common
+  build:
+    context: ./airflow
+  env_file:
+    - .env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "5"
+    AIRFLOW__SCHEDULER__PARSING_PROCESSES: "2"
+    # Force the standard task runner to fresh-exec the worker subprocess
+    # instead of fork()-ing. pyspark's Java gateway is unhappy with forked
+    # state, surfacing as JAVA_GATEWAY_EXITED.
+    AIRFLOW__CORE__EXECUTE_TASKS_NEW_PYTHON_INTERPRETER: "True"
+    AIRFLOW__WEBSERVER__SECRET_KEY: maria-reliability-lab-not-for-prod
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+    PYTHONPATH: /opt/airflow:/opt
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    AWS_REGION: ${AWS_REGION}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./internal_etl_package:/opt/airflow/internal_etl_package
+    - ./config:/opt/airflow/config
+    - ./alerts:/opt/airflow/alerts
+    - ./data:/opt/data
+    - ./chaos:/opt/chaos
+    - ./scripts:/opt/scripts
+    - ./tests:/opt/airflow/tests
+    - ./dashboard:/opt/airflow/dashboard
+    - ./pytest.ini:/opt/airflow/pytest.ini:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  networks:
+    - maria-net
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # First-volume-init only: creates the `metastore` database HMS uses.
+      - ./scripts/init_hms_db.sql:/docker-entrypoint-initdb.d/init_hms_db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    networks:
+      - maria-net
+
+  storage:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    mem_limit: 256m
+    networks:
+      - maria-net
+
+  mc:
+    image: minio/mc:latest
+    depends_on:
+      storage:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until (/usr/bin/mc alias set minio http://storage:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}) do
+          echo '...waiting for MinIO...' && sleep 1
+        done
+        /usr/bin/mc mb -p minio/warehouse
+        /usr/bin/mc anonymous set public minio/warehouse
+        echo "warehouse bucket ready"
+    restart: "no"
+    networks:
+      - maria-net
+
+  catalog:
+    # Hive Metastore in standalone mode, backed by the `metastore` database
+    # on the existing postgres service. Trino's
+    # iceberg connector only registers the rollback_to_snapshot procedure
+    # for hive_metastore/glue/jdbc/rest catalog types.
+    # Custom Dockerfile adds the Postgres JDBC driver (apache/hive:4.0.0
+    # ships without one).
+    build:
+      context: ./catalog
+    environment:
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/metastore
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+    volumes:
+      - ./catalog/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # bash builtin tcp connect: returns 0 iff thrift listener is accepting.
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9083' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    mem_limit: 1g
+    networks:
+      - maria-net
+
+  spark:
+    build:
+      context: ./spark
+    ports:
+      - "7077:7077"
+      - "8081:8081"
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      SPARK_DAEMON_MEMORY: 512m
+      SPARK_WORKER_MEMORY: 1G
+      SPARK_WORKER_CORES: "2"
+      HOME: /tmp
+      _JAVA_OPTIONS: "-Duser.home=/tmp"
+    volumes:
+      - ./data:/opt/data
+    depends_on:
+      catalog:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+      mc:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 2g
+    networks:
+      - maria-net
+
+  trino:
+    image: trinodb/trino:455
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./trino/iceberg_datalake.properties:/etc/trino/catalog/iceberg_datalake.properties:ro
+      - ./trino/jvm.config:/etc/trino/jvm.config:ro
+    depends_on:
+      catalog:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/v1/info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    mem_limit: 2g
+    networks:
+      - maria-net
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        airflow db migrate && \
+        airflow users create \
+          --username airflow --password airflow \
+          --firstname Maria --lastname Bot \
+          --role Admin --email maria@example.com || true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    mem_limit: 1g
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --limit 1 >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    # pyspark drivers run inside this container (see spark_engine.py); 1GB
+    # cgroup was too tight for the JVM and Airflow worker to coexist.
+    mem_limit: 2g
+
+volumes:
+  postgres-data:
+  minio-data:
+
+networks:
+  maria-net:
+    driver: bridge

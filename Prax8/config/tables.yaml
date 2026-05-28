@@ -1,0 +1,13 @@
+# Maria's table replication config.
+# Add a new table = add a new entry here. The factory does the rest.
+tables:
+  - name: prd.users
+    engine: spark              # which TableEngine to use; defaults to spark
+    primary_key: user_id
+    source_path: /opt/data/source/users/
+    critical_columns: [user_id, email, created_at]
+    freshness_sla_hours: 6
+    severity: critical
+
+  # TODO (Phase 1): add prd.orders and prd.events here.
+  # See marias_notes/phase1_factory.md for the schemas.
