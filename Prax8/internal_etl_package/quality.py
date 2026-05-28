@@ -105,8 +105,8 @@ def post_audit(table_config: TableConfig, engine: TableEngine) -> None:
     # ─── Phase 3, Step 1 of 3 ─────────────────────────────────────────────
     # Count primary-key values that appear more than once.
     # The engine already exposes a method for this — find it in engines/base.py.
-    # 👉 TODO: replace 0 with a call to the engine.
-    duplicate_count = 0  # TODO
+    # 👉: replace 0 with a call to the engine.
+    duplicate_count = engine.count_duplicates(table, pk)
 
     log.info(f"[{table}] Post-audit: {duplicate_count} duplicate keys found.")
 
@@ -114,10 +114,18 @@ def post_audit(table_config: TableConfig, engine: TableEngine) -> None:
         # ─── Phase 3, Step 2 of 3 ─────────────────────────────────────────
         # Page the team. Use `send_slack_alert` (already imported above) with
         # severity="CRITICAL" so it routes to #data-incidents AND the pager.
-        # 👉 TODO: call send_slack_alert(...) before raising below.
-        pass  # TODO
+        # 👉: call send_slack_alert(...) before raising below.
+        send_slack_alert(
+            severity="CRITICAL",
+            table=table,
+            message=(
+                f"Data quality check failed for `{table}`: {duplicate_count} duplicate keys found."
+            ),
+        )
 
         # ─── Phase 3, Step 3 of 3 ─────────────────────────────────────────
         # Stop the pipeline so downstream consumers never see the bad data.
-        # 👉 TODO: raise DataQualityError with a helpful message.
-        pass  # TODO
+        # 👉: raise DataQualityError with a helpful message.
+        raise DataQualityError(
+            f"Data quality check failed for `{table}`: {duplicate_count} duplicate keys found."
+        )
