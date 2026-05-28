@@ -11,3 +11,18 @@ tables:
 
   # TODO (Phase 1): add prd.orders and prd.events here.
   # See marias_notes/phase1_factory.md for the schemas.
+  - name: prd.orders
+    engine: spark
+    primary_key: order_id
+    source_path: /opt/data/source/orders/
+    critical_columns: [user_id, amount, created_at]
+    freshness_sla_hours: 6
+    severity: critical
+
+  - name: prd.events
+    engine: spark
+    primary_key: event_id
+    source_path: /opt/data/source/events/
+    critical_columns: [user_id, event_type, occurred_at]
+    freshness_sla_hours: 6
+    severity: critical
