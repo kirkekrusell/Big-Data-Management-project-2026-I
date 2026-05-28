@@ -120,3 +120,6 @@ if [ "$COMPLETED" -eq 3 ]; then
 else
     printf "${BOLD}You have completed %d of 3 phases.${RESET} 💚\n\n" "$COMPLETED"
 fi
+printf "${BOLD}Press any key to close this window...${RESET}"
+read -n 1 -s
+printf "\n"
