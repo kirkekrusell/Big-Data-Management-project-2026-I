@@ -226,3 +226,21 @@ Example database state after successful execution:
 
 ![alt text](image-6.png)
 
+### Shared Slack Workspace
+
+For demonstration purposes, a dedicated Slack workspace was created for this project.
+
+Workspace invite:
+
+`https://join.slack.com/t/bdmproject/shared_invite/zt-3ziia0y6p-JkzCmCk~kVe1Pddg85~K5g`
+
+Notifications are posted to the project channel:
+
+`#all-bdm-project`
+
+The following events generate notifications:
+
+* 🚀 Pipeline started
+* ✅ Pipeline finished
+* ❌ Audit failed
+
