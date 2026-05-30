@@ -9,6 +9,7 @@ In terminal:
 - `cd ...` to the project folder
 - `make up`
 - `make pull-models` - this step may take some time
+
 Access the DAG and trigger runs.
 3. Open http://localhost:8080/
 4. Trigger the DAG
