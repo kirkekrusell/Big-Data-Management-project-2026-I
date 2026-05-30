@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+.venv-lab/
+
+# VS Code
+.vscode/
+
+# Airflow logs
+logs/
