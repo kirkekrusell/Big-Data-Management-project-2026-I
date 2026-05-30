@@ -7,13 +7,8 @@ In order to follow our steps, do the following:
 2. open Docker Desktop and Terminal
 In terminal: 
 - `cd ...` to the project folder
-<<<<<<< Updated upstream
 - `make up`
 - `make pull-models` - this step may take some time
-=======
-- `make up` 
-- `make pull-models` - this step may take some time, it downloads the Ollama model used for LLM extraction
->>>>>>> Stashed changes
 
 Access the DAG and trigger runs.
 
