@@ -19,7 +19,7 @@ Run the pipeline with a LIMIT parameter.
     Set LIMIT=5 for development
     Watch tasks execute in the Graph view
 
-![alt text](image-7.png)
+<img width="1433" height="320" alt="image" src="https://github.com/user-attachments/assets/b98ad2fa-7001-4421-860b-1517d4d325c3" />
 
 5. Shut everything down
 Afterwards `make clean` and all the containers are removed and volumes are deleted (docker compose down -v)
